@@ -10,6 +10,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
     EMBEDDING_MODEL,
     PDF_DIR,
     VECTORSTORE_DIR,
@@ -31,13 +33,13 @@ def create_vectorstore():
     documents = load_pdf_documents()
     print(f"Loaded {len(documents)} documents from PDFs.")
 
-    # Split documents
+    # Split documents using config values
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
     )
     splits = text_splitter.split_documents(documents)
-    print(f"Created {len(splits)} text chunks.")
+    print(f"Created {len(splits)} text chunks (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP}).")
 
     # Create embeddings
     embeddings = HuggingFaceEmbeddings(
