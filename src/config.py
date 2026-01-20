@@ -17,9 +17,9 @@ if not GOOGLE_API_KEY:
     )
 
 # Modèles Gemini
-LLM_MODEL = "gemini-1.5-flash"  # Rapide et gratuit
+LLM_MODEL = "gemini-2.5-flash"  # Latest stable model
 LLM_TEMPERATURE = 0
-EMBEDDING_MODEL = "models/embedding-001"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Local free embeddings
 
 # ========================================
 # Langfuse Configuration
