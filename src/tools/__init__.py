@@ -41,7 +41,12 @@ class DataTools:
             return "No client data available."
 
         if client_id:
-            result = df[df["client_id"] == client_id]
+            # Convert to int if client_id is numeric
+            try:
+                client_id_int = int(client_id) if isinstance(client_id, str) and client_id.isdigit() else client_id
+                result = df[df["client_id"] == client_id_int]
+            except:
+                result = df[df["client_id"] == client_id]
         elif email:
             result = df[df["email"] == email]
         else:
@@ -57,7 +62,11 @@ class DataTools:
         if df.empty:
             return "No subscription data available."
 
-        result = df[df["client_id"] == client_id]
+        try:
+            client_id_int = int(client_id) if isinstance(client_id, str) and client_id.isdigit() else client_id
+            result = df[df["client_id"] == client_id_int]
+        except:
+            result = df[df["client_id"] == client_id]
         if result.empty:
             return "No subscriptions found for this client."
         return result.to_string()
@@ -68,7 +77,11 @@ class DataTools:
         if df.empty:
             return "No bill data available."
 
-        result = df[df["client_id"] == client_id]
+        try:
+            client_id_int = int(client_id) if isinstance(client_id, str) and client_id.isdigit() else client_id
+            result = df[df["client_id"] == client_id_int]
+        except:
+            result = df[df["client_id"] == client_id]
         if result.empty:
             return "No bills found for this client."
         return result.to_string()
@@ -79,7 +92,11 @@ class DataTools:
         if df.empty:
             return "No ticket data available."
 
-        result = df[df["client_id"] == client_id]
+        try:
+            client_id_int = int(client_id) if isinstance(client_id, str) and client_id.isdigit() else client_id
+            result = df[df["client_id"] == client_id_int]
+        except:
+            result = df[df["client_id"] == client_id]
         if result.empty:
             return "No tickets found for this client."
         return result.to_string()
@@ -97,7 +114,11 @@ class DataTools:
         if df.empty:
             return "No usage data available."
 
-        result = df[df["client_id"] == client_id]
+        try:
+            client_id_int = int(client_id) if isinstance(client_id, str) and client_id.isdigit() else client_id
+            result = df[df["client_id"] == client_id_int]
+        except:
+            result = df[df["client_id"] == client_id]
         if result.empty:
             return "No usage data found for this client."
         return result.to_string()
