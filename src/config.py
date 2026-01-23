@@ -56,5 +56,5 @@ EVAL_QUESTIONS_FILE = DATA_DIR / "evaluation_questions.xlsx"
 # Configuration RAG
 # ========================================
 CHUNK_SIZE = 1200  # Larger chunks to fit full model descriptions
-CHUNK_OVERLAP = 600  # 50% overlap for good context continuity
+CHUNK_OVERLAP = 700  # Higher overlap to ensure model names + years stay together across page breaks
 TOP_K_RESULTS = 10  # Good coverage

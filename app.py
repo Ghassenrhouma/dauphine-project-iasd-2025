@@ -9,24 +9,18 @@ st.set_page_config(page_title="TelecomPlus Support", page_icon="📱")
 st.title("📱 TelecomPlus - Support Client")
 st.markdown("*Assistant intelligent pour répondre à vos questions*")
 
-# Sidebar for client ID (optional)
+# Sidebar with examples
 with st.sidebar:
-    st.header("Configuration")
-    client_id = st.text_input(
-        "Identifiant Client (optionnel)", 
-        placeholder="Ex: 1, 2, 3...",
-        help="Entrez votre ID client pour des réponses personnalisées"
-    )
-    st.markdown("---")
-    st.markdown("### Exemples de questions")
+    st.header("💡 Exemples de questions")
     st.markdown("**Questions FAQ:**")
     st.markdown("- Quels modes de paiement acceptez-vous ?")
     st.markdown("- Y a-t-il des frais de résiliation ?")
     st.markdown("- Comment fonctionne le roaming ?")
+    st.markdown("- Quel est le prix de l'iPhone 16 ?")
     st.markdown("")
     st.markdown("**Questions personnelles:**")
-    st.markdown("- Quel est mon abonnement actuel ?")
-    st.markdown("- Quelle est ma dernière facture ?")
+    st.markdown("- Je m'appelle Jean Bertrand. Quelle est ma consommation ?")
+    st.markdown("- Je m'appelle Pierre Richard. Ai-je un ticket en cours ?")
     st.markdown("- Quels sont les forfaits disponibles ?")
 
 # Initialize chat history
@@ -50,9 +44,7 @@ if prompt := st.chat_input("Posez votre question..."):
     # Get assistant response
     with st.chat_message("assistant"):
         with st.spinner("Recherche en cours..."):
-            # Use client_id if provided and not empty
-            cid = client_id.strip() if client_id and client_id.strip() else None
-            response = answer(prompt, client_id=cid)
+            response = answer(prompt)
         st.markdown(response)
 
     # Add assistant response to chat history

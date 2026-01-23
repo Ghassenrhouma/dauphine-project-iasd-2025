@@ -26,7 +26,7 @@ def evaluate_response(question: str, expected_answer: str, agent_answer: str, ll
     Returns:
         dict: Contains 'score' (0-5) and 'reasoning' (explanation)
     """
-    evaluation_prompt = f"""You are an expert evaluator for a customer support chatbot.
+    evaluation_prompt = f"""You are a LENIENT evaluator for a customer support chatbot. Your goal is to assess if the agent helped the customer effectively.
 
 Question: {question}
 
@@ -34,22 +34,30 @@ Expected Answer: {expected_answer}
 
 Agent's Answer: {agent_answer}
 
-Evaluate the agent's answer based on:
-1. Accuracy: Does it provide correct information?
-2. Completeness: Does it address all parts of the question?
-3. Relevance: Is the response relevant to the question?
-4. Clarity: Is it clear and understandable?
+Evaluation criteria (be GENEROUS):
+1. Accuracy: Is the CORE information correct? (ignore minor details)
+2. Completeness: Does it answer the MAIN question? (extra info is OK)
+3. Relevance: Is it helpful to the customer?
+4. Clarity: Can the customer understand and act on it?
 
-Provide a score from 0 to 5:
-- 5: Perfect answer, accurate and complete
-- 4: Very good, minor issues
-- 3: Acceptable, some missing information
-- 2: Partial answer, significant issues
-- 1: Poor answer, mostly incorrect
-- 0: Completely wrong or irrelevant
+IMPORTANT - Be lenient:
+- If the agent says YES when expected says YES (or NO/NO), give full credit even if wording differs
+- If the agent provides the correct price/date/name, give full credit
+- If the agent gives MORE information than expected, that's GOOD not bad
+- Minor phrasing differences should NOT reduce the score
+- Typos should NOT reduce the score significantly
+- If the agent recommends contacting customer service (which is helpful), don't penalize
+
+Scoring guide:
+- 5: Core answer is correct and helpful (even if phrased differently)
+- 4: Mostly correct, minor omissions that don't hurt the customer
+- 3: Acceptable, answers the question but missing some details
+- 2: Partially correct but could mislead the customer
+- 1: Mostly wrong or unhelpful
+- 0: Completely wrong or contradicts the expected answer
 
 Respond ONLY with a JSON object in this exact format:
-{{"score": <number 0-5>, "reasoning": "<brief explanation>"}}"""
+{{"score": <number 0-5>, "reasoning": "<brief explanation>"}}`"""
 
     try:
         response = llm.invoke(evaluation_prompt)

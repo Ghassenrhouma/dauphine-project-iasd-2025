@@ -60,6 +60,74 @@ def get_rag_chain():
                     if doc not in docs:
                         docs.insert(0, doc)
         
+        # If question is about launch dates/commercialization year
+        if any(word in question_lower for word in ['commercialisé', 'commercialise', 'lancé', 'lance', 'sorti', 'sortie', '2023', '2022', '2021', '2020']):
+            import re
+            # Extract year if mentioned
+            year_match = re.search(r'\b(20\d{2})\b', question)
+            if year_match:
+                year = year_match.group(1)
+                # Search for chunks with the year
+                launch_docs = vectorstore.similarity_search(f"commercialisé en {year}", k=3)
+                # Also explicitly search for model names - they may be in adjacent chunks
+                # Common pattern: chunk N ends with "iPhone X\n" and chunk N+1 starts with "Ce modèle, commercialisé en YEAR"
+                for model_num in ['11', '12', '13', '14', '15', '16', '17']:
+                    model_docs = vectorstore.similarity_search(f"iPhone {model_num}", k=2)
+                    for doc in model_docs:
+                        if doc not in launch_docs:
+                            launch_docs.append(doc)
+            else:
+                launch_docs = vectorstore.similarity_search("iPhone commercialisé lancé date sortie", k=6)
+            for launch_doc in launch_docs:
+                if launch_doc not in docs:
+                    docs.insert(0, launch_doc)
+        
+        # If question is about colors/coloris
+        if any(word in question_lower for word in ['coloris', 'couleur', 'color']):
+            import re
+            # Extract iPhone model number if mentioned
+            models = re.findall(r'iPhone\s*(\d+)', question)
+            if models:
+                for model in models:
+                    # Search for unique specs to get the RIGHT chunk
+                    # Battery life is unique per model
+                    if model == '16':
+                        color_docs = vectorstore.similarity_search(f"iPhone 16 22h lecture vidéo", k=5)
+                    elif model == '15':
+                        color_docs = vectorstore.similarity_search(f"iPhone 15 20h lecture vidéo A16", k=5)
+                    elif model == '14':
+                        color_docs = vectorstore.similarity_search(f"iPhone 14 20h lecture vidéo", k=5)
+                    elif model == '13':
+                        color_docs = vectorstore.similarity_search(f"iPhone 13 19h lecture vidéo", k=5)
+                    else:
+                        color_docs = vectorstore.similarity_search(f"iPhone {model} Coloris", k=5)
+                    # Replace docs with color-specific search results
+                    docs = color_docs + [d for d in docs if d not in color_docs]
+                    break  # Only process first model mentioned
+        
+        # If question is about trade-in/reprise
+        if any(word in question_lower for word in ['reprise', 'trade-in', 'échanger', 'ancien téléphone', 'ancien telephone', 'ancien appareil']):
+            # Search for the catalog page with detailed reprise info (has contact details)
+            tradein_docs = vectorstore.similarity_search("Reprise Échangez votre ancien téléphone bénéficiez réduction Téléphone 3900 boutique www.telecomplus.fr", k=5)
+            for doc in tradein_docs:
+                if doc not in docs:
+                    docs.insert(0, doc)
+        
+        # If question is about family plans/data sharing
+        if any(word in question_lower for word in ['famille', 'family', 'partager', 'partage', 'multi-ligne', 'multi ligne']):
+            # Get the exact FAQ Q31 that answers this question - search for the actual answer text
+            family_docs = vectorstore.similarity_search("Oui nous proposons des forfaits famille qui permettent de partager un pool de données entre plusieurs lignes", k=3)
+            # REPLACE docs entirely with family-focused docs to avoid confusion with individual plan data
+            docs = family_docs
+        
+        # If question is about cancellation/termination fees
+        if any(word in question_lower for word in ['résiliation', 'resiliation', 'résilier', 'resilier', 'frais', 'engagé', 'engage']):
+            # Search for the specific Q3 answer that has BOTH scenarios
+            cancel_docs = vectorstore.similarity_search("Y a-t-il des frais de résiliation hors période engagement résiliation est gratuite encore engagé", k=4)
+            for doc in cancel_docs:
+                if doc not in docs:
+                    docs.insert(0, doc)
+        
         return docs
 
     template = """You are a TelecomPlus customer support assistant. Answer the question based on the provided context from our FAQ documents.
@@ -72,37 +140,47 @@ Question: {question}
 Instructions:
 - Answer in French, be helpful and concise
 - Use ALL information from the context - combine details from multiple paragraphs if needed
+- CRITICAL: Information may be split across chunks. If you see "iPhone X" at the end of one chunk and "Ce modèle, commercialisé en [year]" at the start of another chunk, they refer to the SAME model. Connect them together.
+- For trade-in/reprise questions: Include ALL contact methods mentioned (phone, boutique, website) and explain how customers can get the discount. If a specific product is mentioned (e.g., iPhone 16), ALSO include its base price from the price table in context
 
 CRITICAL - For multi-criteria product searches (e.g., camera + price + storage):
-1. First, scan ALL context for the price table (format: "Modèle 128GB 256GB 512GB" followed by "iPhone X - 749€")
-2. Extract prices for the requested storage (e.g., 256GB column)
-3. Then, scan descriptions for the technical spec (e.g., "48 Mpx", "Triple caméra 48 Mpx")
+1. First, scan ALL context for the price table
+2. Extract prices for the requested storage capacity
+3. Then, scan descriptions for the technical spec (e.g., camera megapixels)
 4. Match model names between table and descriptions
-5. Apply ALL filters: spec requirement (e.g., >= 48 Mpx) AND budget (e.g., < 1200€) AND storage
+5. Apply ALL filters: spec requirement AND budget AND storage
 6. List ONLY models that meet ALL criteria with their exact prices from the table
+7. ALSO mention models that meet the technical criteria but EXCEED the budget, explaining why they don't qualify
 
-Example: "iPhone with 48 Mpx, < 1200€, 256GB"
-- Find table: iPhone 15 256GB = 1099€, iPhone 16 256GB = 1149€, iPhone 17 256GB = 1299€
-- Find camera: iPhone 15 has 48 Mpx, iPhone 16 has 48 Mpx, iPhone 17 has 48 Mpx
-- Filter: iPhone 15 (1099€ < 1200€ ✓), iPhone 16 (1149€ < 1200€ ✓), iPhone 17 (1299€ >= 1200€ ✗)
-- Answer: iPhone 15 (1099€) and iPhone 16 (1149€)
-
-For BUDGET questions ("avec mon budget de X€"):
-- Find the BEST option(s) within budget (highest price that fits)
-- If a better model is slightly over budget (<10-15% over), MENTION it as an alternative
-- Example: Budget 1000€ for 256GB → Recommend iPhone 14 (999€), mention iPhone 15 (1099€) slightly exceeds budget
-- DO NOT list ALL cheaper models - only recommend the BEST VALUE (most expensive within budget) and ONE alternative just over budget
+CRITICAL - For BUDGET questions ("avec mon budget de X€", "Quel iPhone puis-je m'offrir"):
+- ONLY use prices that appear EXACTLY in the price table in context - NEVER invent or estimate prices
+- If a model/storage combination is not in the price table, do NOT mention it
+- Recommend ONLY the BEST option within budget (the NEWEST/most expensive model that fits)
+- Mention ONE alternative slightly over budget if relevant
+- STOP AFTER 2 MODELS MAXIMUM - do NOT list older/cheaper models
+- Example: For 1000€ budget, recommend iPhone 14 (999€) and mention iPhone 15 (1099€) as alternative. DO NOT list iPhone 13, 12, 11, X, etc.
 
 For battery/autonomy comparison questions:
 - Look for "autonomie" or "Xh de lecture vidéo" in ALL chunks for EACH model
 - Calculate the exact difference between models
 
-For launch dates: iPhone 15 = Sept 2023, iPhone 14 = 2022, iPhone 13 = 2021
-For online account: "votre espace client" on www.telecomplus.fr
-For roaming/travel abroad questions ("à l'étranger", "sans surcoût"):
-- EU countries: "roaming comme à la maison" = use your French plan without extra cost
-- Non-EU countries: extra charges apply, recommend subscribing to "pass international" (daily or weekly) available in customer area
-For family plans: TelecomPlus offers multi-line/family plans
+For photography/camera recommendation questions:
+- Identify the BEST model for photography (highest specs)
+- ALSO mention the next best alternative(s)
+- Note that choice may depend on budget
+
+For family/sharing questions ("partager", "famille", "data avec ma famille"):
+- The answer is YES - TelecomPlus DOES offer family plans
+- Say: "Oui, nous proposons des forfaits famille qui permettent de partager un pool de données entre plusieurs lignes"
+- Direct users to contact customer service for more details
+- IGNORE any individual plan listings in the context - they are NOT relevant to this question
+- DO NOT say "data sharing is not available" or "not an option" - it IS available via family plans
+
+For cancellation/termination questions ("frais de résiliation", "engagé"):
+- ALWAYS mention BOTH scenarios in your answer:
+  1. If still engaged: fees equal to remaining monthly payments
+  2. If engagement period is over ("hors engagement"): termination is FREE ("gratuite")
+- Both pieces of information MUST appear in your answer
 
 Always synthesize across all chunks before answering."""
     
@@ -145,6 +223,9 @@ def answer_data_query(question: str, client_id: str = None) -> str:
         google_api_key=GOOGLE_API_KEY,
     )
     
+    # Get vectorstore for travel questions that need roaming policy
+    vectorstore = get_vectorstore()
+    
     # Determine which tool to use based on question content
     question_lower = question.lower()
     
@@ -165,15 +246,24 @@ def answer_data_query(question: str, client_id: str = None) -> str:
             available_plans = data_tools.query_forfaits()
             data_context = f"Current subscription:\n{current_plan}\n\nAvailable plans:\n{available_plans}"
         elif "consommation" in question_lower or ("data" in question_lower and "combien" not in question_lower) or "usage" in question_lower or "utilisation" in question_lower:
-            data_context = data_tools.query_consommation(client_id)
+            # Include both consumption AND plan info so user knows their total allowance
+            consumption = data_tools.query_consommation(client_id)
+            plan_info = data_tools.query_abonnements(client_id)
+            data_context = f"Customer's current plan:\n{plan_info}\n\nCustomer's consumption data:\n{consumption}"
         elif "abonnement" in question_lower or "souscription" in question_lower or ("forfait" in question_lower and ("mon" in question_lower or "quel" in question_lower)):
             # For plan-related questions with client_id, include both current plan and available plans for comparison
             current_plan = data_tools.query_abonnements(client_id)
             available_plans = data_tools.query_forfaits()
             data_context = f"Current subscription:\n{current_plan}\n\nAvailable plans:\n{available_plans}"
-        elif "voyage" in question_lower or "étranger" in question_lower or "international" in question_lower:
-            # For travel questions, include subscription info to check roaming coverage
-            data_context = data_tools.query_abonnements(client_id)
+        elif "voyage" in question_lower or "étranger" in question_lower or "international" in question_lower or "pars" in question_lower or "italie" in question_lower or "états-unis" in question_lower or "etats-unis" in question_lower:
+            # For travel questions, include subscription info AND roaming policy from FAQ
+            subscription_info = data_tools.query_abonnements(client_id)
+            # Also get roaming policy from vectorstore - search for EU and non-EU policies
+            roaming_policy = vectorstore.similarity_search("roaming comme à la maison Europe Union Européenne sans surcoût", k=3)
+            roaming_policy2 = vectorstore.similarity_search("hors Europe pass international tarifs roaming", k=2)
+            all_roaming = roaming_policy + [d for d in roaming_policy2 if d not in roaming_policy]
+            roaming_context = "\n\n".join([doc.page_content for doc in all_roaming])
+            data_context = f"Customer subscription:\n{subscription_info}\n\nRoaming policy from FAQ (USE THIS TO ANSWER):\n{roaming_context}"
         elif "résili" in question_lower or "annul" in question_lower:
             # For cancellation questions, include subscription with engagement info
             data_context = data_tools.query_abonnements(client_id)
@@ -194,23 +284,21 @@ Customer question: {question}
 Instructions:
 - Provide a clear, helpful answer in French
 - Format the information nicely and highlight important details
-- For plan comparison questions: MUST calculate exact price differences (e.g., "Confort 20GB à 15.99€ - votre Essentiel 5GB à 9.99€ = +6.00€ par mois pour 15GB de data supplémentaire")
-- For plan upgrades: show ALL available upgrades with price differences and data increases
+- CRITICAL: If you see data in the "Data from our system" section above, that data exists and is correct. Use it directly in your answer.
+- For DATA CONSUMPTION questions: ALWAYS mention BOTH the consumption amount AND the total plan allowance (e.g., "3.2 Go sur votre forfait de 5GB")
+- For travel/roaming questions: FIRST mention customer's current plan with data amount, THEN use the "Roaming policy from FAQ" section to explain if there are surcharges. For EU countries (like Italy): mention "roaming comme à la maison" = no extra fees. For non-EU countries (like USA): ALWAYS state that "les tarifs dépendent de votre destination" and mention international pass options available in espace client.
+- For plan comparison questions: MUST calculate exact price differences between plans
+- For plan upgrades: show ALL available upgrades with price differences and data increases. Also mention HOW to change plan (via espace client or call 3900) and WHEN change takes effect (next billing cycle)
 - For engagement questions: check "statut" ("Actif - Engagé" = under contract, "Actif - Hors engagement" = no contract)
 - For CANCELLATION (résiliation) questions: 
   * Check "statut" field: "Hors engagement" = free cancellation, "Engagé" = fees apply
   * Include the "date_debut" (contract start date) in your answer
   * If engagement period is 12 or 24 months, calculate when engagement ended
   * Example: "Votre contrat a commencé le [date_debut] et vous êtes hors engagement depuis [date]. La résiliation est gratuite."
-- For TRAVEL questions (voyage, États-Unis, étranger hors Europe):
-  * EU destinations: "roaming comme à la maison" (included in plan)
-  * Non-EU destinations (USA, Asia, etc.): Recommend "pass international journalier ou hebdomadaire" available in "espace client"
-  * Mention specific pass options: daily pass or weekly pass
-  * Say: "Nous recommandons un pass international. Vous pouvez souscrire à un pass journalier ou hebdomadaire dans votre espace client."
-- For ticket questions: list ALL tickets, their status ("En cours" = ongoing, "Résolu" = resolved), and subjects
+- For ticket questions: The data shows a table with columns. If you see ANY rows in the ticket table, those are the customer's tickets. List ALL of them using the EXACT ticket_id values from the first column (not the row index), along with sujet, statut, and date_creation
 - Be specific with numbers: exact prices, data amounts, dates, ticket IDs
 - Always answer directly - perform calculations yourself, don't ask user to check elsewhere
-- If you see the data in the system output, USE IT to answer the question completely"""
+- NEVER say "I don't have access" or "information not available" if the data is shown in the system output above"""
     
     prompt = ChatPromptTemplate.from_template(template)
     
@@ -249,7 +337,9 @@ Classify the following question into one of these categories:
   * General product information (iPhone features, colors, specs, prices, recommendations, budget questions like "avec mon budget")
   * Technical support procedures
   * Any "comment" (how to) questions about procedures
-  * Using iPhone abroad, roaming questions
+  * Travel/roaming questions WITHOUT client identification (e.g., "Puis-je utiliser mon iPhone à l'étranger ?")
+  * General questions about OPTIONS or SERVICES (e.g., "Quelles sont les options pour les appels vers l'étranger ?")
+  * Questions about international calling options, roaming options, available services
   
 - "DATA": Questions asking for PERSONAL/SPECIFIC data:
   * "Available plans/forfaits" (general list) - use DATA
@@ -257,19 +347,16 @@ Classify the following question into one of these categories:
   * Client's personal bills/factures or amounts ("ma prochaine facture")
   * Client's data usage/consommation
   * Client's support tickets
-  * Questions mentioning a specific person's name ("Je m'appelle...")
-  * Questions about travel WITH personal plan info ("Je pars en...")
+  * ANY question mentioning a specific person's name ("Je m'appelle X") = DATA, even if asking about travel
+  * Personal account questions with client identification
 
 IMPORTANT: 
 - Product recommendations with "mon budget" = FAQ (not personal data)
-- "Puis-je utiliser mon iPhone à l'étranger" = FAQ (general policy)
-
-IMPORTANT: 
 - "Comment" (how to) questions = FAQ (procedures)
 - Product questions (iPhone price, colors, specs, recommendations) = FAQ
 - Questions about "available plans" or "forfaits disponibles" = DATA
-- Personal account questions ("my subscription", "Je m'appelle X") = DATA
-- Questions asking "how to view/access/consult" something = FAQ
+- IF the question has "Je m'appelle [NAME]" = ALWAYS DATA (regardless of topic)
+- General questions about OPTIONS/SERVICES without personal pronouns (mon/ma/mes) = FAQ
 
 Question: {question}
 
@@ -294,6 +381,10 @@ Answer with ONLY one word: either "FAQ" or "DATA"."""
         # Check if we need client_id for personal queries
         needs_client_id = any(word in question_lower for word in 
                              ["mon", "ma", "mes", "facture", "abonnement", "consommation", "usage", "ticket", "m'appelle", "résili", "resili", "annul"])
+        
+        # If classified as DATA but no personal keywords and no client_id, treat as FAQ
+        if not needs_client_id and not client_id:
+            return answer_faq(question)
         
         if needs_client_id and not client_id:
             # Try to extract name from question ("Je m'appelle X Y")
