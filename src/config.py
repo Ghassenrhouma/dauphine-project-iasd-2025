@@ -17,9 +17,9 @@ if not GOOGLE_API_KEY:
     )
 
 # Modèles Gemini
-LLM_MODEL = "gemini-1.5-flash"  # Rapide et gratuit
+LLM_MODEL = "gemini-2.5-flash"  # Latest stable model
 LLM_TEMPERATURE = 0
-EMBEDDING_MODEL = "models/embedding-001"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Local free embeddings
 
 # ========================================
 # Langfuse Configuration
@@ -55,6 +55,6 @@ EVAL_QUESTIONS_FILE = DATA_DIR / "evaluation_questions.xlsx"
 # ========================================
 # Configuration RAG
 # ========================================
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
-TOP_K_RESULTS = 3
+CHUNK_SIZE = 1200  # Larger chunks to fit full model descriptions
+CHUNK_OVERLAP = 700  # Higher overlap to ensure model names + years stay together across page breaks
+TOP_K_RESULTS = 10  # Good coverage

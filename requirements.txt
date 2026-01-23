@@ -50,3 +50,9 @@ langfuse>=2.6.3
 # Progress bars and utilities
 # ========================================
 tqdm>=4.66.1
+
+# ========================================
+# Local embeddings (free alternative)
+# ========================================
+sentence-transformers>=2.2.2
+langchain-huggingface>=0.0.3
