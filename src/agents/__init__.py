@@ -4,9 +4,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import StrOutputParser
 
-from src.config import GOOGLE_API_KEY, LLM_MODEL, LLM_TEMPERATURE, TOP_K_RESULTS
+from src.config import GOOGLE_API_KEY, LLM_MODEL, LLM_TEMPERATURE, TOP_K_RESULTS, ENABLE_MONITORING, LANGFUSE_CLIENT, flush_langfuse
 from src.vectorstore import get_vectorstore
 from src.tools import data_tools
+
+# Import observe decorator for Langfuse tracing
+if ENABLE_MONITORING:
+    from langfuse import observe
+else:
+    # Create a no-op decorator if monitoring is disabled
+    def observe(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 
 def format_docs(docs):
@@ -190,6 +200,7 @@ Always synthesize across all chunks before answering."""
     return enhanced_retriever, prompt, llm
 
 
+@observe(name="answer_faq")
 def answer_faq(question: str) -> str:
     """Answer FAQ questions using RAG."""
     enhanced_retriever, prompt, llm = get_rag_chain()
@@ -207,6 +218,7 @@ def answer_faq(question: str) -> str:
 # Data Agent - Step 4
 # ========================================
 
+@observe(name="answer_data_query")
 def answer_data_query(question: str, client_id: str = None) -> str:
     """Answer customer-specific data questions using direct tool calls.
     
@@ -311,6 +323,7 @@ Instructions:
 # Orchestrator - Step 5
 # ========================================
 
+@observe(name="orchestrate")
 def orchestrate(question: str, client_id: str = None) -> str:
     """Orchestrate between RAG and Data agents based on question type.
     
@@ -337,17 +350,17 @@ Classify the following question into one of these categories:
   * General product information (iPhone features, colors, specs, prices, recommendations, budget questions like "avec mon budget")
   * Technical support procedures
   * Any "comment" (how to) questions about procedures
-  * Travel/roaming questions WITHOUT client identification (e.g., "Puis-je utiliser mon iPhone à l'étranger ?")
-  * General questions about OPTIONS or SERVICES (e.g., "Quelles sont les options pour les appels vers l'étranger ?")
+  * Travel/roaming questions WITHOUT client identification (e.g., "Puis-je utiliser mon iPhone a l etranger ?")
+  * General questions about OPTIONS or SERVICES (e.g., "Quelles sont les options pour les appels vers l etranger ?")
   * Questions about international calling options, roaming options, available services
   
 - "DATA": Questions asking for PERSONAL/SPECIFIC data:
   * "Available plans/forfaits" (general list) - use DATA
-  * Client's CURRENT subscription/abonnement (with "mon abonnement", "ma facture", "mes données")
-  * Client's personal bills/factures or amounts ("ma prochaine facture")
-  * Client's data usage/consommation
-  * Client's support tickets
-  * ANY question mentioning a specific person's name ("Je m'appelle X") = DATA, even if asking about travel
+  * Client CURRENT subscription/abonnement (with "mon abonnement", "ma facture", "mes donnees")
+  * Client personal bills/factures or amounts ("ma prochaine facture")
+  * Client data usage/consommation
+  * Client support tickets
+  * ANY question mentioning a specific person name ("Je m appelle X") = DATA, even if asking about travel
   * Personal account questions with client identification
 
 IMPORTANT: 
@@ -355,7 +368,7 @@ IMPORTANT:
 - "Comment" (how to) questions = FAQ (procedures)
 - Product questions (iPhone price, colors, specs, recommendations) = FAQ
 - Questions about "available plans" or "forfaits disponibles" = DATA
-- IF the question has "Je m'appelle [NAME]" = ALWAYS DATA (regardless of topic)
+- IF the question has "Je m appelle [NAME]" = ALWAYS DATA (regardless of topic)
 - General questions about OPTIONS/SERVICES without personal pronouns (mon/ma/mes) = FAQ
 
 Question: {question}
@@ -409,7 +422,11 @@ Answer with ONLY one word: either "FAQ" or "DATA"."""
                         client_id = match.group(1)
         
         # Always return the query even if client_id not found - let the data agent handle it
-        return answer_data_query(question, client_id)
+        result = answer_data_query(question, client_id)
+        flush_langfuse()
+        return result
     else:
-        return answer_faq(question)
+        result = answer_faq(question)
+        flush_langfuse()
+        return result
 

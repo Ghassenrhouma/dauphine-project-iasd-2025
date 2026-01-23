@@ -30,10 +30,28 @@ LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
 ENABLE_MONITORING = bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY)
 
+# Initialize Langfuse if monitoring is enabled
+LANGFUSE_HANDLER = None
+LANGFUSE_CLIENT = None
 if ENABLE_MONITORING:
-    print(" Monitoring Langfuse activé")
+    try:
+        from langfuse import Langfuse
+        import os
+        # Set environment variables for automatic tracing
+        os.environ["LANGFUSE_PUBLIC_KEY"] = LANGFUSE_PUBLIC_KEY
+        os.environ["LANGFUSE_SECRET_KEY"] = LANGFUSE_SECRET_KEY
+        os.environ["LANGFUSE_HOST"] = LANGFUSE_HOST
+        
+        LANGFUSE_CLIENT = Langfuse(
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+            host=LANGFUSE_HOST
+        )
+        print("✅ Monitoring Langfuse activé")
+    except Exception as e:
+        print(f"⚠️  Langfuse activé mais erreur d'initialisation: {e}")
 else:
-    print(" Monitoring Langfuse désactivé (clés manquantes)")
+    print("❌ Monitoring Langfuse désactivé (clés manquantes)")
 
 # ========================================
 # Chemins du projet
@@ -58,3 +76,12 @@ EVAL_QUESTIONS_FILE = DATA_DIR / "evaluation_questions.xlsx"
 CHUNK_SIZE = 1200  # Larger chunks to fit full model descriptions
 CHUNK_OVERLAP = 700  # Higher overlap to ensure model names + years stay together across page breaks
 TOP_K_RESULTS = 10  # Good coverage
+
+
+def flush_langfuse():
+    """Flush Langfuse traces to ensure they are sent."""
+    if LANGFUSE_CLIENT:
+        try:
+            LANGFUSE_CLIENT.flush()
+        except Exception:
+            pass
